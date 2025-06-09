@@ -14,7 +14,7 @@ class LaikagoGymEnv(gym.Env):
 
         # 强化学习参数
         self.action_space = spaces.Box(low=-1, high=1, shape=(12,))  # 12个关节
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(48,))  # 示例观测维度
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(30,))  # 示例观测维度
         
         # 初始化物理参数
         self.time_step = 1/500
@@ -76,14 +76,14 @@ class LaikagoGymEnv(gym.Env):
 
     def _calculate_reward(self):
         # 奖励函数设计（需调试）
-        base_pos, _ = p.getBasePositionAndOrientation(self.quadruped)
+        base_pos, base_orientation = p.getBasePositionAndOrientation(self.quadruped)
         linear_vel, _ = p.getBaseVelocity(self.quadruped)
         
         # 前进速度奖励
         forward_reward = linear_vel[0]
         
         # 姿态稳定惩罚
-        angles = p.getEulerFromQuaternion(_)
+        angles = p.getEulerFromQuaternion(base_orientation)
         orientation_penalty = abs(angles[0]) + abs(angles[1])
         
         # 存活奖励
