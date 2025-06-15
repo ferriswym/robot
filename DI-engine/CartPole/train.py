@@ -36,8 +36,6 @@ Remember to keep them connected by mesh to ensure that they can exchange informa
 """
 import gym
 from ditk import logging
-from ding.data.model_loader import FileModelLoader
-from ding.data.storage_loader import FileStorageLoader
 from ding.model import DQN
 from ding.policy import DQNPolicy
 from ding.envs import DingEnvWrapper, BaseEnvManagerV2
@@ -54,28 +52,44 @@ from dizoo.classic_control.cartpole.config.cartpole_dqn_config import main_confi
 def main():
     logging.getLogger().setLevel(logging.INFO)
     cfg = compile_config(main_config, create_cfg=create_config, auto=True, save_cfg=task.router.node_id == 0)
+    print(cfg)
     ding_init(cfg)
+    
     with task.start(async_mode=False, ctx=OnlineRLContext()):
+        # 创建环境管理器并显式启动它们
         collector_env = BaseEnvManagerV2(
-            env_fn=[lambda: DingEnvWrapper(gym.make("CartPole-v0")) for _ in range(cfg.env.collector_env_num)],
+            env_fn=[lambda: DingEnvWrapper(gym.make("CartPole-v1", render_mode="rgb_array", new_step_api=False))  # 修改这里
+                    for _ in range(cfg.env.collector_env_num)],
             cfg=cfg.env.manager
         )
         evaluator_env = BaseEnvManagerV2(
-            env_fn=[lambda: DingEnvWrapper(gym.make("CartPole-v0")) for _ in range(cfg.env.evaluator_env_num)],
+            env_fn=[lambda: DingEnvWrapper(gym.make("CartPole-v1", render_mode="rgb_array", new_step_api=False))  # 修改这里
+                    for _ in range(cfg.env.evaluator_env_num)],
             cfg=cfg.env.manager
         )
-        evaluator_env.enable_save_replay(replay_path=cfg.exp_name + '/video')
+        
+        # evaluator_env.enable_save_replay(replay_path=cfg.exp_name + '/video')
 
+        # 关键：显式启动环境管理器
+        collector_env.launch()
+        evaluator_env.launch()
+
+        # 正确设置全局种子
         set_pkg_seed(cfg.seed, use_cuda=cfg.policy.cuda)
+        
+        # 为环境设置种子
+        collector_env.seed(cfg.seed)
+        evaluator_env.seed(cfg.seed)
+        
+        # 初始化环境
+        collector_env.reset()
+        evaluator_env.reset()
 
         model = DQN(**cfg.policy.model)
         buffer_ = DequeBuffer(size=cfg.policy.other.replay_buffer.replay_buffer_size)
         policy = DQNPolicy(cfg.policy, model=model)
 
-        # Consider the case with multiple processes
         if task.router.is_active:
-            # You can use labels to distinguish between workers with different roles,
-            # here we use node_id to distinguish.
             if task.router.node_id == 0:
                 task.add_role(task.role.LEARNER)
             elif task.router.node_id == 1:
@@ -83,12 +97,12 @@ def main():
             else:
                 task.add_role(task.role.COLLECTOR)
 
-            # Sync their context and model between each worker.
             task.use(ContextExchanger(skip_n_iter=1))
             task.use(ModelExchanger(model))
 
-        # Here is the part of single process pipeline.
+        # 使用内置的评估中间件
         task.use(interaction_evaluator(cfg, policy.eval_mode, evaluator_env))
+        
         task.use(eps_greedy_handler(cfg))
         task.use(StepCollector(cfg, policy.collect_mode, collector_env))
         task.use(data_pusher(cfg, buffer_))
@@ -97,6 +111,10 @@ def main():
         task.use(CkptSaver(policy, cfg.exp_name, train_freq=100))
 
         task.run()
+        
+        # 任务结束后关闭环境管理器
+        collector_env.close()
+        evaluator_env.close()
 
 
 if __name__ == "__main__":

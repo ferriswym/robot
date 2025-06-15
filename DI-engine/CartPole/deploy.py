@@ -10,6 +10,7 @@ from matplotlib.animation import FuncAnimation
 import os
 
 def run_trained_model(config_path, ckpt_path, render=True, episodes=10, save_video=False, video_path='output.mp4'):
+    logging.getLogger().setLevel(logging.INFO)
     # 加载配置文件
     from dizoo.classic_control.cartpole.config.cartpole_dqn_config import main_config, create_config
     from ding.config import compile_config
@@ -101,6 +102,6 @@ if __name__ == "__main__":
     config_path = "dizoo/classic_control/cartpole/config/cartpole_dqn_config.py"
     ckpt_path = "./cartpole_dqn_seed0/ckpt/final.pth.tar"  # 替换为你的模型路径
     # 直接可视化
-    run_trained_model(config_path, ckpt_path, render=True, episodes=10)
+    run_trained_model(config_path, ckpt_path, render=True, episodes=100)
     # 保存为视频
     # run_trained_model(config_path, ckpt_path, render=False, save_video=True, video_path='./cartpole_video.mp4')
